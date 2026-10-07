@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="SourcePack logo" width="420">
+</p>
+
 # SourcePack
 
 Bundle your research sources with hashes and provenance into one archive you can verify later, and keep track of which evidence is due for another look.
