@@ -106,6 +106,44 @@ def test_rewritten_manifest_is_caught_only_by_the_anchor(project: Path, tmp_path
     assert "TAMPERED" in statuses(verify(archive, manifest_hash))
 
 
+def test_verify_coverage_with_the_manifest_hash_decides_every_file(
+    project: Path, tmp_path: Path
+) -> None:
+    archive, manifest_hash = make(project, tmp_path)
+    block = verify(archive, manifest_hash)["coverage"]
+    assert (block["unit"], block["items"], block["decided"], block["undecided"]) == (
+        "files",
+        2,
+        2,
+        0,
+    )
+    assert block["reasons"] == {} and block["notes"] == []
+
+
+def test_verify_coverage_without_the_manifest_hash_leaves_matching_files_undecided(
+    project: Path, tmp_path: Path
+) -> None:
+    archive, _ = make(project, tmp_path)
+    block = verify(archive)["coverage"]
+    assert (block["decided"], block["undecided"]) == (0, 2)
+    assert block["reasons"] == {"unanchored": 2}
+    assert "no separately stored manifest hash" in block["notes"][0]
+
+
+def test_verify_coverage_still_decides_altered_and_missing_files_without_an_anchor(
+    project: Path, tmp_path: Path
+) -> None:
+    archive, _ = make(project, tmp_path)
+    rewrite(archive, {"sources/000/paper.txt": b"changed"}, drop=("sources/001/notes.md",))
+    block = verify(archive)["coverage"]
+    assert (block["items"], block["decided"], block["undecided"]) == (2, 2, 0)
+    assert block["decided"] + block["undecided"] == block["items"]
+
+
+def test_build_has_no_coverage_block(project: Path, tmp_path: Path) -> None:
+    assert "coverage" not in build(spec("paper.txt"), project, tmp_path / "p.zip")
+
+
 def test_original_changed_or_missing(project: Path, tmp_path: Path) -> None:
     archive, _ = make(project, tmp_path)
     (project / "paper.txt").write_text("edited later", encoding="utf-8")
@@ -184,6 +222,46 @@ def test_missing_data_future_date_and_empty() -> None:
     future = fresh({"as_of": "2025-01-01", "sources": [src()]})
     assert statuses(future) == ["INVALID_DATE"]
     assert statuses(fresh({"as_of": "2026-01-01", "sources": []})) == ["NEEDS_REVIEW"]
+
+
+def test_fresh_coverage_counts_sources_that_could_be_judged() -> None:
+    sources = [
+        src("ok"),
+        src("due", checked_at="2025-01-01"),
+        {"id": "undated"},
+        src("future", checked_at="2026-06-01"),
+    ]
+    block = fresh({"as_of": "2026-03-01", "sources": sources})["coverage"]
+    assert (block["unit"], block["items"], block["decided"], block["undecided"]) == (
+        "sources",
+        4,
+        2,
+        2,
+    )
+    assert block["reasons"] == {
+        "check_date_after_assessment_date": 1,
+        "no_check_date_or_interval": 1,
+    }
+    assert block["decided"] + block["undecided"] == block["items"]
+    assert "dates you supplied" in block["notes"][0]
+    assert fresh({"as_of": "2026-03-01", "sources": []})["coverage"]["items"] == 0
+
+
+def test_cli_min_coverage_for_verify_and_fresh(
+    project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive, manifest_hash = make(project, tmp_path)
+    out = str(tmp_path / "r.json")
+    assert main(["verify", str(archive), "-o", out, "--min-coverage", "100"]) == 3
+    assert "coverage: decided 0 of 2 files; 2 could not be checked (unanchored 2)" in (
+        capsys.readouterr().err
+    )
+    given = ["--manifest-hash", manifest_hash]
+    assert main(["verify", str(archive), "-o", out, *given, "--min-coverage", "100"]) == 0
+    data = tmp_path / "fresh.json"
+    data.write_text(json.dumps({"as_of": "2026-03-01", "sources": [src(), {"id": "u"}]}), "utf-8")
+    assert main(["fresh", str(data), "-o", out, "--min-coverage", "50"]) == 0
+    assert main(["fresh", str(data), "-o", out, "--min-coverage", "51"]) == 3
 
 
 @pytest.mark.parametrize(

@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from .core import InputError, file_digest, finding, inside, now, report, require
+from .core import InputError, coverage, file_digest, finding, inside, now, report, require
 from .core import digest as sha256
 
 MANIFEST = "manifest.json"
@@ -168,9 +168,26 @@ def verify(
                 manifest_sha256=actual_manifest_hash,
             )
         )
+    # Without a manifest hash from outside the archive, a file that matches the manifest shows
+    # only that the archive is consistent: a rewritten manifest would match too. Those files
+    # are undecided. Missing and altered files are decided either way.
+    passed = sum(1 for f in out if f["status"] == "PASS" and "path" in f["evidence"])
+    unanchored = 0 if manifest_hash else passed
     return report(
         "SourcePack",
         out,
+        coverage=coverage(
+            "files",
+            len(listed),
+            len(listed) - unanchored,
+            {"unanchored": unanchored},
+            notes=[
+                "no separately stored manifest hash was supplied, so matching files show only "
+                "that the archive is consistent with its own manifest"
+            ]
+            if unanchored
+            else [],
+        ),
         manifest_sha256=actual_manifest_hash,
         scope="integrity of archive contents only; the manifest is not independently authenticated",
     )

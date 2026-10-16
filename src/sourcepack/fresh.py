@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from .core import InputError, finding, report, require
+from .core import InputError, coverage, finding, report, require
 
 
 def _date(value: Any, field: str) -> date:
@@ -30,6 +30,7 @@ def fresh(data: dict[str, Any], today: date | None = None) -> dict[str, Any]:
     sources = require(data, "sources", list)
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
+    undecided = {"no_check_date_or_interval": 0, "check_date_after_assessment_date": 0}
     for source in sources:
         ident = require(source, "id", str)
         if not ident or ident in seen:
@@ -38,6 +39,7 @@ def fresh(data: dict[str, Any], today: date | None = None) -> dict[str, Any]:
         claims = _ids(source.get("claim_ids", []), "claim_ids")
         checked, interval = source.get("checked_at"), source.get("review_after_days")
         if not checked or interval is None:
+            undecided["no_check_date_or_interval"] += 1
             out.append(
                 finding(
                     "NEEDS_REVIEW",
@@ -52,6 +54,7 @@ def fresh(data: dict[str, Any], today: date | None = None) -> dict[str, Any]:
         checked_on = _date(checked, "checked_at")
         age = (as_of - checked_on).days
         if age < 0:
+            undecided["check_date_after_assessment_date"] += 1
             out.append(
                 finding(
                     "INVALID_DATE", "The check date is after the assessment date.", source=ident
@@ -86,6 +89,16 @@ def fresh(data: dict[str, Any], today: date | None = None) -> dict[str, Any]:
     return report(
         "SourcePack Freshness",
         out,
+        coverage=coverage(
+            "sources",
+            len(sources),
+            len(sources) - sum(undecided.values()),
+            undecided,
+            notes=[
+                "a source is judged only on the dates you supplied; whether its content "
+                "is still correct is not checked"
+            ],
+        ),
         as_of=as_of.isoformat(),
         scope="your review policy applied to dates you supply; no live retrieval or reminders",
     )

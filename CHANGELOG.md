@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `verify` and `fresh` reports have a `coverage` block, a one-line summary on stderr and in the HTML report. Without a manifest hash, matching files are undecided (`unanchored`); sources without usable dates are undecided.
+- `--min-coverage PCT`: exit 3 when fewer than PCT percent of items were decided and nothing else failed.
+
 ## 0.1.0
 
 First release.

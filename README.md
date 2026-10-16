@@ -63,7 +63,9 @@ sourcepack fresh freshness.json
 
 `REVIEW_DUE` when the source's age reaches your interval (with the `next_review` date), `WITHIN_REVIEW_WINDOW` otherwise, `SOURCE_CHANGED` when the two fingerprints you supplied differ, and `NEEDS_REVIEW` / `INVALID_DATE` for missing or impossible dates. `as_of` defaults to today. "Due" means "look again under your policy", not "out of date".
 
-All commands take `-o report.json`, `--html report.html` and `--strict`. Exit codes: 0 completed, 1 `--strict` and something other than a pass was reported, 2 unusable input.
+All commands take `-o report.json`, `--html report.html` and `--strict`. Exit codes: 0 completed, 1 `--strict` and something other than a pass was reported, 2 unusable input, 3 `--min-coverage` was not met.
+
+**Coverage.** `verify` and `fresh` add a `coverage` object and print a line on stderr. For `verify` the items are the files listed in the manifest. Without a separately stored `--manifest-hash`, a file that matches the manifest shows only that the archive agrees with itself, since a rewritten manifest would match too, so those files are undecided (`unanchored`); altered or missing files are decided either way. For `fresh` the items are the sources, and one with no check date or review interval, or a check date after the assessment date, is undecided. `--min-coverage PCT` exits 3 when fewer than PCT percent of items were decided and nothing else failed. `build` has no coverage block.
 
 ## Limits
 
